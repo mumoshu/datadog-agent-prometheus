@@ -45,10 +45,20 @@ class GenericCheck(PrometheusCheck):
         drops = compileRes(config.get('drop'))
         keeps = compileRes(config.get('keep'))
         headers = config.get('headers', {})
-        # Or 'text' according to checks.PrometheusFormat: https://github.com/DataDog/dd-agent/blob/master/checks/prometheus_check.py#L32
-        format = instance.get('format', 'protobuf').upper()
+        # 'protobuf' or 'text' according to checks.PrometheusFormat: https://github.com/DataDog/dd-agent/blob/master/checks/prometheus_check.py#L32
+        format = instance.get('format')
 
-        content_type, data = self.poll(endpoint, headers=headers, pFormat=format)
+        # Enable content negotiation by default so that we can avoid issues like https://github.com/latency-at/datadog-agent-prometheus/pull/5
+        # without any specific configuration
+        if format is None:
+            headers['accept'] = 'text/plain; version=0.0.4, ' \
+                                'application/vnd.google.protobuf; ' \
+                                'proto=io.prometheus.client.MetricFamily; ' \
+                                'encoding=delimited'
+        else:
+            format = format.upper()
+
+        content_type, data = self.poll(endpoint, headers=headers, pFormat=None)
         for metric in filter(
                 lambda m: filterMetric(m, drops, keeps),
                 self.parse_metric_family(data, content_type)):
